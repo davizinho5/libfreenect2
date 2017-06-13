@@ -30,7 +30,7 @@ SET(DEPENDS_DIR "${MY_DIR}/depends" CACHE STRING "dependency directory must be s
 OPTION(BUILD_SHARED_LIBS "Build shared (ON) or static (OFF) libraries" ON)
 OPTION(BUILD_EXAMPLES "Build examples" ON)
 OPTION(BUILD_OPENNI2_DRIVER "Build OpenNI2 driver" ON)
-OPTION(ENABLE_CXX11 "Enable C++11 support" OFF)
+OPTION(ENABLE_CXX11 "Enable C++11 support" ON)
 OPTION(ENABLE_OPENCL "Enable OpenCL support" ON)
 OPTION(ENABLE_CUDA "Enable CUDA support" ON)
 OPTION(ENABLE_OPENGL "Enable OpenGL support" ON)
@@ -260,7 +260,7 @@ IF(TurboJPEG_FOUND)
   )
 ENDIF()
 
-SET(HAVE_OpenGL disabled)
+SET(HAVE_OpenGL enabled)
 IF(ENABLE_OPENGL)
   FIND_PACKAGE(GLFW3)
   FIND_PACKAGE(OpenGL)
@@ -292,7 +292,8 @@ IF(ENABLE_OPENGL)
   ENDIF()
 ENDIF(ENABLE_OPENGL)
 
-SET(HAVE_OpenCL disabled)
+SET(HAVE_OpenCL enabled)
+OPTION(ENABLE_OPENCL "Enable OpenCL support" ON)
 IF(ENABLE_OPENCL)
   FIND_PACKAGE(OpenCL)
 
@@ -344,24 +345,21 @@ IF(ENABLE_CUDA)
     SET(LIBFREENECT2_WITH_CUDA_SUPPORT 1)
     SET(HAVE_CUDA yes)
 
-    STRING(REPLACE "\\" "/" NVCUDASAMPLES_ROOT "$ENV{NVCUDASAMPLES_ROOT}")
-    STRING(REPLACE "\\" "/" NVCUDASAMPLES8_0_ROOT "$ENV{NVCUDASAMPLES8_0_ROOT}")
+    STRING(REPLACE "\\" "/" NVCUDASAMPLES_ROOT "$ENV{NVCUDASAMPLES_ROOT};$ENV{NVCUDASAMPLES8_0_ROOT}")
     CUDA_INCLUDE_DIRECTORIES(
       "${MY_DIR}/include/"
       "${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc"
       "${NVCUDASAMPLES_ROOT}/common/inc"
-      "${NVCUDASAMPLES8_0_ROOT}/common/inc"
     )
     SET(CUDA_FLAGS -use_fast_math)
     IF(NOT MSVC)
       SET(CUDA_FLAGS "${CUDA_FLAGS} -Xcompiler -fPIC")
     ENDIF()
-    IF(HAVE_CXX11 EQUAL yes AND CUDA_VERSION VERSION_GREATER 7.0)
-      SET(CUDA_FLAGS "${CUDA_FLAGS} -std=c++11")
-    ENDIF()
 
     SET(OLD_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    STRING(REGEX REPLACE "-std=c\\+\\+.." "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    IF(CUDA_VERSION VERSION_LESS 7.0)
+      STRING(REGEX REPLACE "-std=c\\+\\+.." "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    ENDIF()
     CUDA_COMPILE(CUDA_OBJECTS
       src/cuda_depth_packet_processor.cu
       src/cuda_kde_depth_packet_processor.cu
@@ -380,16 +378,6 @@ IF(ENABLE_CUDA)
     )
   ENDIF()
 ENDIF(ENABLE_CUDA)
-
-# RPATH handling for CUDA 8.0 libOpenCL.so conflict. See #804.
-IF(HAVE_OpenCL EQUAL yes AND UNIX AND NOT APPLE)
-  FILE(GLOB CUDA_ld_so_conf /etc/ld.so.conf.d/cuda*.conf)
-  IF(CUDA_ld_so_conf)
-    MESSAGE(WARNING "Your CUDA installation overrides OpenCL system library path.")
-    GET_FILENAME_COMPONENT(OpenCL_LIB_PATH ${OpenCL_LIBRARY} DIRECTORY)
-    SET(CMAKE_INSTALL_RPATH ${OpenCL_LIB_PATH} CACHE STRING "Set RPATH for system OpenCL")
-  ENDIF()
-ENDIF()
 
 # RPATH handling for private libusb copies
 # Users have two options:
@@ -435,14 +423,12 @@ MESSAGE(STATUS "Linking with these libraries: \n ${LIBRARIES_STRING}")
 TARGET_LINK_LIBRARIES(freenect2 ${LIBRARIES})
 
 CONFIGURE_FILE(freenect2.cmake.in "${PROJECT_BINARY_DIR}/freenect2Config.cmake" @ONLY)
-CONFIGURE_FILE(freenect2Version.cmake.in "${PROJECT_BINARY_DIR}/freenect2ConfigVersion.cmake" @ONLY)
 CONFIGURE_FILE(freenect2.pc.in "${PROJECT_BINARY_DIR}/freenect2.pc" @ONLY)
 
 INSTALL(TARGETS freenect2 DESTINATION lib RUNTIME DESTINATION bin)
 INSTALL(DIRECTORY "${MY_DIR}/include/${PROJECT_NAME}" DESTINATION include PATTERN "*.in" EXCLUDE)
 INSTALL(DIRECTORY "${PROJECT_BINARY_DIR}/${PROJECT_NAME}" DESTINATION include)
 INSTALL(FILES "${PROJECT_BINARY_DIR}/freenect2Config.cmake" DESTINATION lib/cmake/freenect2/)
-INSTALL(FILES "${PROJECT_BINARY_DIR}/freenect2ConfigVersion.cmake" DESTINATION lib/cmake/freenect2/)
 INSTALL(FILES "${PROJECT_BINARY_DIR}/freenect2.pc" DESTINATION lib/pkgconfig/)
 
 ADD_SUBDIRECTORY(${MY_DIR}/doc)
